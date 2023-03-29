@@ -24,47 +24,47 @@ string printList(byte** repeaterConfigurations, const int repeaterCount, const i
 	return output.str();
 }
 
-void generate(int repeaterCount) {
+byte** generate(const int repeaterCount, int* optimalDelay, int* configurationCount) {
 
 	// Calculate total possible combinations of the repeaters and optimal delay (= most combinations with same total delay)
 	int combinationCount = pow(repeaterCount, 4);
-	int optimalDelay = repeaterCount + (repeaterCount * 3 / 2);
+	*optimalDelay = repeaterCount + (repeaterCount * 3 / 2);
 
 	// Generate list with all configurations on the optimal delay
 	byte** configurations = new byte * [combinationCount];
-	int configurationCount = 0;
+	*configurationCount = 0;
 	for (int i = 0; i < combinationCount; i++) {
 
-		configurations[configurationCount] = new byte[repeaterCount];
+		configurations[*configurationCount] = new byte[repeaterCount];
 		int delay = 0;
 		for (int r = 0; r < repeaterCount; r++) {
-			configurations[configurationCount][r] = (byte)((i >> (r * 2)) & 3);
-			delay += (int)configurations[configurationCount][r] + 1;
+			configurations[*configurationCount][r] = (byte)((i >> (r * 2)) & 3);
+			delay += (int)configurations[*configurationCount][r] + 1;
 		}
 
-		if (delay != optimalDelay) {
-			delete[] configurations[configurationCount];
-			configurations[configurationCount] = 0;
+		if (delay != *optimalDelay) {
+			delete[] configurations[*configurationCount];
+			configurations[*configurationCount] = 0;
 		}
 		else {
-			configurationCount++;
+			(*configurationCount)++;
 		}
 
 	}
 
 	// Create virtual queue to simmulate configuration order
-	byte** virtualQueue = new byte * [configurationCount];
+	byte** virtualQueue = new byte * [*configurationCount];
 
-	for (int i = 0; i < configurationCount; i++) {
+	for (int i = 0; i < *configurationCount; i++) {
 		virtualQueue[i] = configurations[i];
 	}
 
 	// Order the configurations after the final queue-priority by simulating queue-processing
-	for (int d = 1; d <= optimalDelay; d++) {
+	for (int d = 1; d <= *optimalDelay; d++) {
 
 		// Iterate over queue
 		int queuePointer = 0;
-		for (int i = 0; i < configurationCount; i++) {
+		for (int i = 0; i < *configurationCount; i++) {
 
 			byte* configuration = virtualQueue[queuePointer];
 
@@ -76,10 +76,10 @@ void generate(int repeaterCount) {
 				if (delay == d) {
 
 					// Remove from queue
-					for (int i2 = queuePointer; i2 < configurationCount - 1; i2++) virtualQueue[i2] = virtualQueue[i2 + 1];
+					for (int i2 = queuePointer; i2 < *configurationCount - 1; i2++) virtualQueue[i2] = virtualQueue[i2 + 1];
 
 					// Add at the end of the queue
-					virtualQueue[configurationCount - 1] = configuration;
+					virtualQueue[*configurationCount - 1] = configuration;
 
 					// Step back one element to keep correct order
 					queuePointer--;
@@ -94,18 +94,16 @@ void generate(int repeaterCount) {
 
 	}
 
-	string output = printList(virtualQueue, repeaterCount, (size_t)configurationCount);
-
-	// Cleanup memory
-	for (int i = 0; i < configurationCount; i++) {
-		delete[] virtualQueue[i];
-	}
 	delete[] configurations;
-	delete[] virtualQueue;
+	
+	return virtualQueue;
+}
 
-	cout << output << endl;
-	cout << "At delay " << optimalDelay << " with " << repeaterCount << " repeaters are " << configurationCount << " combinations possible" << endl;
-
+void cleanup(byte** configurationList, const int configurationCount) {
+	for (int i = 0; i < configurationCount; i++) {
+		delete[] configurationList[i];
+	}
+	delete[] configurationList;
 }
 
 int main() {
@@ -115,7 +113,7 @@ int main() {
 	cout << "# Wireless-Redstone Repeater-Chain-Generator     #" << endl;
 	cout << "# By M_Marvin (Marvin Köhler) 06.03.2023         #" << endl;
 	cout << "##################################################" << endl;
-	cout << endl << "Type help to see commands" << endl;
+	cout << endl << "Type help to see commands and explenation" << endl;
 
 	char input[128];
 	while (true) {
@@ -130,12 +128,58 @@ int main() {
 				break;
 			}
 			else if (strcmp(command, "gen") == 0) {
-				int repeaterCount = atoi(strtok(NULL, " "));
+				char* arg1 = strtok(NULL, " ");
+
+				if (arg1 == NULL) {
+					cout << "Not enough arguments, type help to see correct arguments" << endl;
+					continue;
+				}
+
+				int repeaterCount = atoi(arg1);
 				cout << "Generate priority map for " << repeaterCount << " repeaters ..." << endl;
-				generate(repeaterCount);
+
+				int optimalDelay = 0;
+				int configurationCount = 0;
+				byte** configurationList = generate(repeaterCount, &optimalDelay, &configurationCount);
+				cout << printList(configurationList, repeaterCount, (size_t)configurationCount) << endl;
+				cout << "At delay " << optimalDelay << " with " << repeaterCount << " repeaters are " << configurationCount << " combinations possible" << endl;
+				cleanup(configurationList, configurationCount);
+			}
+			else if (strcmp(command, "wrrc") == 0) {
+				char* arg1 = strtok(NULL, " ");
+				char* arg2 = strtok(NULL, " ");
+
+				if (arg1 == NULL || arg2 == NULL) {
+					cout << "Not enough arguments, type help to see correct arguments" << endl;
+					continue;
+				}
+
+				int repeaterCount = atoi(arg1);
+				int address = atoi(arg2);
+				
+				int optimalDelay = 0;
+				int configurationCount = 0;
+				byte** configurationList = generate(repeaterCount, &optimalDelay, &configurationCount);
+
+				if (configurationCount < address) {
+					cout << "Address " << address << " does not exist with only " << repeaterCount << " repeaters!" << endl;
+					cout << "At delay " << optimalDelay << " with " << repeaterCount << " repeaters are " << configurationCount << " combinations possible" << endl;
+				}
+				else {
+					cout << "Address-Code: | ";
+					for (int r = 0; r < repeaterCount; r++) cout << (int)configurationList[address - 1][r] + 1 << " | ";
+					cout << endl;
+				}
+
+				cleanup(configurationList, configurationCount);
 			}
 			else if (strcmp(command, "help") == 0) {
-				cout << "Type 'gen *repeater count*' to generate a prioritiy list, type 'exit' to close the programm." << endl;
+				cout << "WRRC -> Wireless Redstone Repeater Chain" << endl;
+				cout << "WRRC-Address -> An repeater configuration specified by the number of repeaters and the position in the priority list." << endl;
+				cout << "Commands:" << endl;
+				cout << "Type 'gen *repeater count*' to generate a prioritiy list (with address numbers)" << endl;
+				cout << "Type 'wrrc *repeater count* *adress nr.*' to get the repeater configuration of the given address-nr." << endl;
+				cout << "Type 'exit' to close the programm" << endl;
 			}
 		}
 
